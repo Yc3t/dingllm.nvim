@@ -198,41 +198,7 @@ end
 local group = vim.api.nvim_create_augroup('DING_LLM_AutoGroup', { clear = true })
 local active_job = nil
 
-function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_data_fn)
-  vim.api.nvim_clear_autocmds { group = group }
-  local prompt = get_prompt(opts)
-  local system_prompt = opts.system_prompt or 'You are a helpful assistant.'
-  local args = make_curl_args_fn(opts, prompt, system_prompt)
-  local curr_event_state = nil
-
-  local function parse_and_call(line)
-      local event = line:match '^event: (.+)$'
-      if event then
-        curr_event_state = event
-        return
-      end
-      local data_match = line:match '^data: (.+)$'
-      if data_match then
-        handle_data_fn(data_match, curr_event_state)
-      end
-    end
- 
-
-  active_job = Job:new {
-    command = 'curl',
-    args = args,
-    on_stdout = function(_, out)
-      parse_and_call(out)
-    end,
-    on_stderr = function(_, _) end,
-    on_exit = function()
-      active_job = nil
-    end,
-  }
-
-  active_job:start()
-
-  vim.api.nvim_create_autocmd('User', {
+pi.nvim_create_autocmd('User', {
     group = group,
     pattern = 'DING_LLM_Escape',
     callback = function()
