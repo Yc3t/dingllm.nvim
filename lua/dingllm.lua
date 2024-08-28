@@ -90,28 +90,6 @@ function M.make_openai_spec_curl_args(opts, prompt, system_prompt)
   return args
 end
 
-function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
-  local api_key = opts.api_key_name and get_api_key(opts.api_key_name)
-  local url = opts.url .. "/" .. opts.model .. ":generateContent?key=" .. api_key
-
-  local data = {
-      contents = {
-          {
-              parts = { { text = system_prompt } },
-              role = "model",
-          },
-          {
-              parts = { { text = prompt } },
-              role = "user",
-          },
-      },
-  }
-
-  local args = { '-N', '-X', 'POST', '-H', 'Content-Type: application/json', '-d', vim.json.encode(data) }
-  table.insert(args, url)
-  return args
-end
-
 function M.write_string_at_cursor(str)
   vim.schedule(function()
     local current_window = vim.api.nvim_get_current_win()
@@ -170,9 +148,35 @@ function M.handle_openai_spec_data(data_stream)
   end
 end
 
-function M.handle_gemini_spec_data(json_str)
-  local json = vim.json.decode(json_str)
-  if json.candidates and json.candidates[1].content.parts[1].text then
+local group = vim.api.nvim_create_augroup('DING_LLM_AutoGroup', { clear = true })
+local active_job = nil
+
+
+
+function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
+  local url = opts.url
+  local api_key = opts.api_key_name and get_api_key(opts.api_key_name)
+  local data = {
+    contents = {
+      { role = "user", parts = { { text = system_prompt .. "\n\n" .. prompt } } }
+    },
+    generationConfig = {
+      temperature = 0.7,
+      maxOutputTokens = 4096,
+    },
+  }
+  local args = { '-N', '-X', 'POST', '-H', 'Content-Type: application/json', '-d', vim.json.encode(data) }
+  if api_key then
+    table.insert(args, '-H')
+    table.insert(args, 'Authorization: Bearer ' .. api_key)
+  end
+  table.insert(args, url)
+  return args
+end
+
+function M.handle_gemini_spec_data(data_stream)
+  local json = vim.json.decode(data_stream)
+  if json.candidates and json.candidates[1] and json.candidates[1].content and json.candidates[1].content.parts then
     local content = json.candidates[1].content.parts[1].text
     if content then
       M.write_string_at_cursor(content)
@@ -180,31 +184,27 @@ function M.handle_gemini_spec_data(json_str)
   end
 end
 
-local group = vim.api.nvim_create_augroup('DING_LLM_AutoGroup', { clear = true })
-local active_job = nil
-
 function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_data_fn)
   vim.api.nvim_clear_autocmds { group = group }
   local prompt = get_prompt(opts)
-  local system_prompt = opts.system_prompt or 'You are a tsundere uwu anime. Yell at me for not setting my configuration for my llm plugin correctly'
+  local system_prompt = opts.system_prompt or 'You are a helpful assistant.'
   local args = make_curl_args_fn(opts, prompt, system_prompt)
   local curr_event_state = nil
 
   local function parse_and_call(line)
-    local event = line:match '^event: (.+)$'
-    if event then
-      curr_event_state = event
-      return
+    if opts.api == "gemini" then
+      handle_data_fn(line)
+    else
+      local event = line:match '^event: (.+)$'
+      if event then
+        curr_event_state = event
+        return
+      end
+      local data_match = line:match '^data: (.+)$'
+      if data_match then
+        handle_data_fn(data_match, curr_event_state)
+      end
     end
-    local data_match = line:match '^data: (.+)$'
-    if data_match then
-      handle_data_fn(data_match, curr_event_state)
-    end
-  end
-
-  if active_job then
-    active_job:shutdown()
-    active_job = nil
   end
 
   active_job = Job:new {
@@ -214,15 +214,7 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
       parse_and_call(out)
     end,
     on_stderr = function(_, _) end,
-    on_exit = function(j, return_val)
-      if return_val ~= 0 then
-          print("dingllm: Curl command failed with code:", return_val)
-      end
-
-      local json_string = table.concat(j:result())
-      local data_str = "data: " .. json_string
-      parse_and_call(data_str)
-
+    on_exit = function()
       active_job = nil
     end,
   }
