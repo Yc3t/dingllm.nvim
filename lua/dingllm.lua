@@ -51,6 +51,8 @@ function M.get_visual_selection()
   end
 end
 
+
+
 function M.make_anthropic_spec_curl_args(opts, prompt, system_prompt)
   local url = opts.url
   local api_key = opts.api_key_name and get_api_key(opts.api_key_name)
@@ -72,6 +74,32 @@ function M.make_anthropic_spec_curl_args(opts, prompt, system_prompt)
   return args
 end
 
+
+
+function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
+  local url = opts.url
+  local api_key = opts.api_key_name and get_api_key(opts.api_key_name)
+  local data = {
+    contents = {
+      { role = "user", parts = { { text = system_prompt .. "\n\n" .. prompt } } }
+    },
+    generationConfig = {
+      temperature = 0.7,
+      maxOutputTokens = 4096,
+    },
+  }
+  local args = { '-N', '-X', 'POST', '-H', 'Content-Type: application/json', '-d', vim.json.encode(data) }
+  if api_key then
+    table.insert(args, '-H')
+    table.insert(args, 'Authorization: Bearer ' .. api_key)
+  end
+  table.insert(args, url)
+  return args
+end
+
+
+
+
 function M.make_openai_spec_curl_args(opts, prompt, system_prompt)
   local url = opts.url
   local api_key = opts.api_key_name and get_api_key(opts.api_key_name)
@@ -89,6 +117,8 @@ function M.make_openai_spec_curl_args(opts, prompt, system_prompt)
   table.insert(args, url)
   return args
 end
+
+
 
 function M.write_string_at_cursor(str)
   vim.schedule(function()
@@ -127,6 +157,8 @@ local function get_prompt(opts)
   return prompt
 end
 
+
+
 function M.handle_anthropic_spec_data(data_stream, event_state)
   if event_state == 'content_block_delta' then
     local json = vim.json.decode(data_stream)
@@ -135,6 +167,8 @@ function M.handle_anthropic_spec_data(data_stream, event_state)
     end
   end
 end
+
+
 
 function M.handle_openai_spec_data(data_stream)
   if data_stream:match '"delta":' then
@@ -148,32 +182,45 @@ function M.handle_openai_spec_data(data_stream)
   end
 end
 
+function M.handle_gemini_spec_data(data_stream)
+  local json = vim.json.decode(data_stream)
+  if json.candidates and json.candidates[1] and json.candidates[1].content and json.candidates[1].content.parts then
+    local content = json.candidates[1].content.parts[1].text
+    if content then
+      M.write_string_at_cursor(content)
+    end
+  end
+end
+
+
+
+
 local group = vim.api.nvim_create_augroup('DING_LLM_AutoGroup', { clear = true })
 local active_job = nil
 
 function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_data_fn)
   vim.api.nvim_clear_autocmds { group = group }
   local prompt = get_prompt(opts)
-  local system_prompt = opts.system_prompt or 'You are a tsundere uwu anime. Yell at me for not setting my configuration for my llm plugin correctly'
+  local system_prompt = opts.system_prompt or 'You are a helpful assistant.'
   local args = make_curl_args_fn(opts, prompt, system_prompt)
   local curr_event_state = nil
 
   local function parse_and_call(line)
-    local event = line:match '^event: (.+)$'
-    if event then
-      curr_event_state = event
-      return
-    end
-    local data_match = line:match '^data: (.+)$'
-    if data_match then
-      handle_data_fn(data_match, curr_event_state)
+    if opts.api == "gemini" then
+      handle_data_fn(line)
+    else
+      local event = line:match '^event: (.+)$'
+      if event then
+        curr_event_state = event
+        return
+      end
+      local data_match = line:match '^data: (.+)$'
+      if data_match then
+        handle_data_fn(data_match, curr_event_state)
+      end
     end
   end
-
-  if active_job then
-    active_job:shutdown()
-    active_job = nil
-  end
+  
 
   active_job = Job:new {
     command = 'curl',
