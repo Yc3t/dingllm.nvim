@@ -175,8 +175,12 @@ function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
 end
 
 function M.handle_gemini_spec_data(data_stream)
-  -- Add a check for empty data_stream
-  if data_stream == "" then
+  -- Add debug logging
+  print("Received data stream:", data_stream)
+
+  -- Check for empty or minimal data
+  if data_stream == "" or data_stream == "{}" then
+    print("Empty or minimal data received, skipping.")
     return
   end
 
@@ -186,11 +190,21 @@ function M.handle_gemini_spec_data(data_stream)
     return
   end
 
+  -- Check if json is nil or not a table
+  if json == nil or type(json) ~= "table" then
+    print("Decoded JSON is nil or not a table")
+    return
+  end
+
   if json.candidates and json.candidates[1] and json.candidates[1].content and json.candidates[1].content.parts then
     local content = json.candidates[1].content.parts[1].text
     if content then
       M.write_string_at_cursor(content)
+    else
+      print("No text content found in the parsed JSON")
     end
+  else
+    print("Expected JSON structure not found")
   end
 end
 
