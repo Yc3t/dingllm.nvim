@@ -175,7 +175,17 @@ function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
 end
 
 function M.handle_gemini_spec_data(data_stream)
-  local json = vim.json.decode(data_stream)
+  -- Add a check for empty data_stream
+  if data_stream == "" then
+    return
+  end
+
+  local success, json = pcall(vim.json.decode, data_stream)
+  if not success then
+    print("Error decoding JSON:", json)
+    return
+  end
+
   if json.candidates and json.candidates[1] and json.candidates[1].content and json.candidates[1].content.parts then
     local content = json.candidates[1].content.parts[1].text
     if content then
@@ -183,6 +193,7 @@ function M.handle_gemini_spec_data(data_stream)
     end
   end
 end
+
 
 function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_data_fn)
   vim.api.nvim_clear_autocmds { group = group }
@@ -238,3 +249,4 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
 end
 
 return M
+
