@@ -170,15 +170,21 @@ function M.handle_openai_spec_data(data_stream)
   end
 end
 
-function M.handle_gemini_spec_data(json_str)
-  local json = vim.json.decode(json_str)
-  if json.candidates and json.candidates[1].content.parts[1].text then
-    local content = json.candidates[1].content.parts[1].text
-    if content then
-      M.write_string_at_cursor(content)
+function M.handle_gemini_spec_data(data_stream, event_state)
+  local json_str = data_stream:match '^data: (.+)$'
+  if json_str then
+    local json = vim.json.decode(json_str)
+    if json and json.candidates and json.candidates[1] and json.candidates[1].content then
+      for _, part in ipairs(json.candidates[1].content.parts) do
+        if part.text then
+          M.write_string_at_cursor(part.text)
+        end
+      end
     end
   end
 end
+
+
 
 local group = vim.api.nvim_create_augroup('DING_LLM_AutoGroup', { clear = true })
 local active_job = nil
@@ -196,21 +202,18 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
       curr_event_state = event
       return
     end
-    local data_match = line:match '^data: (.+)$'
-    if data_match then
-      handle_data_fn(data_match, curr_event_state)
-    end
+    handle_data_fn(line, curr_event_state)
   end
 
- local on_exit_fn
+  local on_exit_fn
   if opts.api_type == "gemini" then
     on_exit_fn = function(j, return_val)
       if return_val ~= 0 then
         print("dingllm: Curl command failed with code:", return_val)
       end
-      local json_string = table.concat(j:result())
-      local data_str = "data: " .. json_string
-      parse_and_call(data_str)
+      for _, line in ipairs(j:result()) do
+        parse_and_call(line)
+      end
       active_job = nil
     end
   else
@@ -230,7 +233,6 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
   }
 
   active_job:start()
-
 
   vim.api.nvim_create_autocmd('User', {
     group = group,
