@@ -191,6 +191,7 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
   local curr_event_state = nil
 
   local function parse_and_call(line)
+    print("Processing line:", line)  -- Debugging print
     local event = line:match '^event: (.+)$'
     if event then
       curr_event_state = event
@@ -223,6 +224,7 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
     command = 'curl',
     args = args,
     on_stdout = function(_, out)
+      print("Received line:", out)
       parse_and_call(out)
     end,
     on_stderr = function(_,_)
