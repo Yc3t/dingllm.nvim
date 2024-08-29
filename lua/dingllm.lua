@@ -192,15 +192,26 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
   local args = make_curl_args_fn(opts, prompt, system_prompt)
   local curr_event_state = nil
 
-  local function parse_and_call(line)
-    local event = line:match '^event: (.+)$'
-    if event then
-      curr_event_state = event
-      return
-    end
-    local data_match = line:match '^data: (.+)$'
-    if data_match then
-      handle_data_fn(data_match, curr_event_state)
+local function parse_and_call(line)
+    if opts.api_type == "gemini" then
+      -- Gemini API response handling
+      local json_obj = vim.json.decode(line)
+      if json_obj and json_obj.candidates and json_obj.candidates[1] and json_obj.candidates[1].content then
+        handle_data_fn(json_obj.candidates[1].content.parts[1].text, "content")
+      end
+    else
+      -- OpenAI-style API response handling
+      local event = line:match '^event: (.+)$'
+      if event then
+        curr_event_state = event
+        return
+      end
+      local data_match = line:match '^data: (.+)$'
+      if data_match then
+        if data_match ~= "[DONE]" then
+          handle_data_fn(data_match, curr_event_state)
+        end
+      end
     end
   end
 
