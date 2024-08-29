@@ -90,28 +90,6 @@ function M.make_openai_spec_curl_args(opts, prompt, system_prompt)
   return args
 end
 
-function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
-  local api_key = opts.api_key_name and get_api_key(opts.api_key_name)
-  local url = opts.url .. "/" .. opts.model .. ":generateContent?key=" .. api_key
-
-  local data = {
-      contents = {
-          {
-              parts = { { text = system_prompt } },
-              role = "model",
-          },
-          {
-              parts = { { text = prompt } },
-              role = "user",
-          },
-      },
-  }
-
-  local args = { '-N', '-X', 'POST', '-H', 'Content-Type: application/json', '-d', vim.json.encode(data) }
-  table.insert(args, url)
-  return args
-end
-
 function M.write_string_at_cursor(str)
   vim.schedule(function()
     local current_window = vim.api.nvim_get_current_win()
@@ -170,6 +148,29 @@ function M.handle_openai_spec_data(data_stream)
   end
 end
 
+function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
+  local api_key = opts.api_key_name and get_api_key(opts.api_key_name)
+  local url = opts.url .. "/" .. opts.model .. ":generateContent?key=" .. api_key
+
+  local data = {
+      contents = {
+          {
+              parts = { { text = system_prompt } },
+              role = "model",
+          },
+          {
+              parts = { { text = prompt } },
+              role = "user",
+          },
+      },
+  }
+
+  local args = { '-N', '-X', 'POST', '-H', 'Content-Type: application/json', '-d', vim.json.encode(data) }
+  table.insert(args, url)
+  return args
+end
+
+
 function M.handle_gemini_spec_data(json_str)
   local json = vim.json.decode(json_str)
   if json.candidates and json.candidates[1].content.parts[1].text then
@@ -179,6 +180,7 @@ function M.handle_gemini_spec_data(json_str)
     end
   end
 end
+
 
 local group = vim.api.nvim_create_augroup('DING_LLM_AutoGroup', { clear = true })
 local active_job = nil
@@ -207,8 +209,7 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
     active_job = nil
   end
 
-
-active_job = Job:new {
+  active_job = Job:new {
     command = 'curl',
     args = args,
     on_stdout = function(_, out)
