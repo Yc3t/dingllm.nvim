@@ -89,28 +89,36 @@ function M.make_openai_spec_curl_args(opts, prompt, system_prompt)
   table.insert(args, url)
   return args
 end
-
 function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
   local api_key = opts.api_key_name and get_api_key(opts.api_key_name)
-  local url = opts.url .. "/" .. opts.model .. ":generateContent?alt=sse&key=" .. api_key
+  local url = opts.url .. "/" .. opts.model .. ":streamGenerateContent?alt=sse&key=" .. api_key
 
   local data = {
-      contents = {
-          {
-              parts = { { text = system_prompt } },
-              role = "model",
-          },
-          {
-              parts = { { text = prompt } },
-              role = "user",
-          },
+    contents = {
+      {
+        parts = { { text = system_prompt } },
+        role = "model",
       },
+      {
+        parts = { { text = prompt } },
+        role = "user",
+      },
+    },
+    generationConfig = {
+      temperature = 1,
+      topK = 64,
+      topP = 0.95,
+      maxOutputTokens = 8192,
+    },
   }
 
-  local args = { '-N', '-X', 'POST', '-H', 'Content-Type: application/json',"--no-buffer", '-d', vim.json.encode(data) }
+  local args = { '-N', '--no-buffer', '-X', 'POST', '-H', 'Content-Type: application/json', '-d', vim.json.encode(data) }
   table.insert(args, url)
   return args
 end
+
+
+
 
 function M.write_string_at_cursor(str)
   vim.schedule(function()
@@ -170,20 +178,20 @@ function M.handle_openai_spec_data(data_stream)
   end
 end
 
-function M.handle_gemini_spec_data(data_stream, event_state)
-  local json_str = data_stream:match '^data: (.+)$'
-  if json_str then
-    local json = vim.json.decode(json_str)
-    if json and json.candidates and json.candidates[1] and json.candidates[1].content then
-      for _, part in ipairs(json.candidates[1].content.parts) do
-        if part.text then
-          M.write_string_at_cursor(part.text)
+local function handle_gemini_spec_data(data_stream)
+  if data_stream:match('^data: ') then
+    local json_str = data_stream:gsub('^data: ', '')
+    if json_str ~= '[DONE]' then
+      local success, json = pcall(vim.json.decode, json_str)
+      if success and json.candidates and json.candidates[1].content.parts[1].text then
+        local content = json.candidates[1].content.parts[1].text
+        if content then
+          M.write_string_at_cursor(content)
         end
       end
     end
   end
 end
-
 
 
 local group = vim.api.nvim_create_augroup('DING_LLM_AutoGroup', { clear = true })
@@ -194,63 +202,29 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
   local prompt = get_prompt(opts)
   local system_prompt = opts.system_prompt or 'You are a tsundere uwu anime. Yell at me for not setting my configuration for my llm plugin correctly'
   local args = make_curl_args_fn(opts, prompt, system_prompt)
-  local curr_event_state = nil
 
   local function parse_and_call(line)
-    if line == nil or line == "" then
-      print("Received nil or empty line")
-      return
-    end
-
-    print("Processing line:", line)  -- Debugging print
-
-    local event = line:match '^event: (.+)$'
-    if event then
-      curr_event_state = event
-      return
-    end
-    local data_match = line:match '^data: (.+)$'
-    if data_match then
-      handle_data_fn(data_match, curr_event_state)
-    end
-  end
-
-
-
-
-
-  local on_exit_fn
-  if opts.api_type == "gemini" then
-    on_exit_fn = function(j, return_val)
-      if return_val ~= 0 then
-        print("dingllm: Curl command failed with code:", return_val)
-      end
-    for _, line in ipairs(j:result()) do
-        parse_and_call(line)
-      end
-      parse_and_call(line)
-      active_job = nil
-    end
-  else
-    on_exit_fn = function()
-      active_job = nil
-    end
+    handle_data_fn(line)
   end
 
   active_job = Job:new {
     command = 'curl',
     args = args,
     on_stdout = function(_, out)
-      print("Received line:", out)
       parse_and_call(out)
     end,
-    on_stderr = function(_,_)
+    on_stderr = function(_, err)
+      print("dingllm: Curl error:", err)
     end,
-    on_exit = on_exit_fn,
+    on_exit = function(j, return_val)
+      if return_val ~= 0 then
+        print("dingllm: Curl command failed with code:", return_val)
+      end
+      active_job = nil
+    end,
   }
 
   active_job:start()
-
 
   vim.api.nvim_create_autocmd('User', {
     group = group,
@@ -267,5 +241,6 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
   vim.api.nvim_set_keymap('n', '<Esc>', ':doautocmd User DING_LLM_Escape<CR>', { noremap = true, silent = true })
   return active_job
 end
+
 
 return M
