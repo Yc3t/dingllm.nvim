@@ -215,9 +215,14 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
     on_stdout = function(_, out)
       parse_and_call(out)
     end,
-    on_stderr = function(_, _) end,
-    on_exit = function()
-      active_job = nil
+    on_stderr = function(_, err)
+      print("dingllm: Curl error:", err)
+    end,
+    on_exit = function(j, return_val)
+      if return_val ~= 0 then
+        print("dingllm: Curl command failed with code:", return_val)
+      end
+      active_job = nil 
     end,
   }
 
