@@ -112,8 +112,6 @@ function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
   return args
 end
 
-
-
 function M.write_string_at_cursor(str)
   vim.schedule(function()
     local current_window = vim.api.nvim_get_current_win()
@@ -172,10 +170,6 @@ function M.handle_openai_spec_data(data_stream)
   end
 end
 
-local group = vim.api.nvim_create_augroup('DING_LLM_AutoGroup', { clear = true })
-local active_job = nil
-
-
 function M.handle_gemini_spec_data(json_str)
   local json = vim.json.decode(json_str)
   if json.candidates and json.candidates[1].content.parts[1].text then
@@ -186,7 +180,8 @@ function M.handle_gemini_spec_data(json_str)
   end
 end
 
-
+local group = vim.api.nvim_create_augroup('DING_LLM_AutoGroup', { clear = true })
+local active_job = nil
 
 function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_data_fn)
   vim.api.nvim_clear_autocmds { group = group }
@@ -219,7 +214,15 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
       parse_and_call(out)
     end,
     on_stderr = function(_, _) end,
-    on_exit = function()
+    on_exit = function(j, return_val)
+      if return_val ~= 0 then
+          print("dingllm: Curl command failed with code:", return_val)
+      end
+
+      local json_string = table.concat(j:result())
+      local data_str = "data: " .. json_string
+      parse_and_call(data_str)
+
       active_job = nil
     end,
   }
