@@ -198,10 +198,12 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
 
   local function parse_and_call(line)
     if line == nil or line == "" then
-    return
-  end
+      print("Received nil or empty line")
+      return
+    end
 
     print("Processing line:", line)  -- Debugging print
+
     local event = line:match '^event: (.+)$'
     if event then
       curr_event_state = event
@@ -213,7 +215,11 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
     end
   end
 
- local on_exit_fn
+
+
+
+
+  local on_exit_fn
   if opts.api_type == "gemini" then
     on_exit_fn = function(j, return_val)
       if return_val ~= 0 then
