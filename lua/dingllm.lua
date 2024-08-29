@@ -92,7 +92,7 @@ end
 
 function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
   local api_key = opts.api_key_name and get_api_key(opts.api_key_name)
-  local url = opts.url .. "/" .. opts.model .. ":generateContent?key=" .. api_key
+  local url = opts.url .. "/" .. opts.model .. ":generateContent?alt=sse&key=" .. api_key
 
   local data = {
       contents = {
@@ -107,7 +107,7 @@ function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
       },
   }
 
-  local args = { '-N', '-X', 'POST', '-H', 'Content-Type: application/json', '-d', vim.json.encode(data) }
+  local args = { '-N', '-X', 'POST', '-H','Content-Type: application/json','--no-buffer', '-d', vim.json.encode(data) }
   table.insert(args, url)
   return args
 end
@@ -225,9 +225,7 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
     on_stdout = function(_, out)
       parse_and_call(out)
     end,
-    on_stderr = function(_, err)
-      print("dingllm: Curl error:", err)
-    end,
+    on_stderr = function(_, _) end,
     on_exit = on_exit_fn,
   }
 
