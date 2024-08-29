@@ -194,7 +194,7 @@ function M.handle_gemini_spec_data(data_stream)
   end
 end
 
-local function gemini_invoke(opts)
+function gemini_invoke(opts)
   M.invoke_llm_and_stream_into_editor({
     url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent',
     model = 'gemini-1.5-flash',
