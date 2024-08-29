@@ -207,22 +207,15 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
     active_job = nil
   end
 
-  active_job = Job:new {
+
+active_job = Job:new {
     command = 'curl',
     args = args,
     on_stdout = function(_, out)
       parse_and_call(out)
     end,
     on_stderr = function(_, _) end,
-    on_exit = function(j, return_val)
-      if return_val ~= 0 then
-          print("dingllm: Curl command failed with code:", return_val)
-      end
-
-      local json_string = table.concat(j:result())
-      local data_str = "data: " .. json_string
-      parse_and_call(data_str)
-
+    on_exit = function()
       active_job = nil
     end,
   }
