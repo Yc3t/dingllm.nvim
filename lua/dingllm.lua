@@ -91,26 +91,26 @@ function M.make_openai_spec_curl_args(opts, prompt, system_prompt)
 end
 
 function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
-  local url = opts.url
   local api_key = opts.api_key_name and get_api_key(opts.api_key_name)
+  local url = opts.url .. "/" .. opts.model .. ":generateContent?key=" .. api_key
+
   local data = {
-    messages = { { role = 'system', content = system_prompt }, { role = 'user', content = prompt } },
-    generationConfig = {
-      temperature = 1,
-      topK = 64,
-      topP = 0.95,
-      maxOutputTokens = 8192,
-      responseMimeType = "text/plain"
-    }
+      contents = {
+          {
+              parts = { { text = system_prompt } },
+              role = "model",
+          },
+          {
+              parts = { { text = prompt } },
+              role = "user",
+          },
+      },
   }
-  local args = { '-N', '-X', 'POST', '-H', 'Content-Type: application/json', '--no-buffer', '-d', vim.json.encode(data) }
-  if api_key then
-    table.insert(args, '?alt=sse&key=' .. api_key)
-  end
+
+  local args = { '-N', '-X', 'POST', '-H', 'Content-Type: application/json', '-d', vim.json.encode(data) }
   table.insert(args, url)
   return args
 end
-
 
 
 
@@ -176,17 +176,16 @@ local group = vim.api.nvim_create_augroup('DING_LLM_AutoGroup', { clear = true }
 local active_job = nil
 
 
-function M.handle_gemini_spec_data(data_stream)
-  if data_stream:match '"text":' then
-    local json = vim.json.decode(data_stream)
-    if json.candidates and json.candidates[1] and json.candidates[1].content then
-      local content = json.candidates[1].content.parts[1].text
-      if content then
-        M.write_string_at_cursor(content)
-      end
+function M.handle_gemini_spec_data(json_str)
+  local json = vim.json.decode(json_str)
+  if json.candidates and json.candidates[1].content.parts[1].text then
+    local content = json.candidates[1].content.parts[1].text
+    if content then
+      M.write_string_at_cursor(content)
     end
   end
 end
+
 
 
 function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_data_fn)
