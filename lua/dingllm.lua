@@ -112,11 +112,21 @@ function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
   }
   local args = { '-N', '-X', 'POST', '-H', 'Content-Type: application/json', '--no-buffer', '-d', vim.json.encode(data) }
   if api_key then
-    url = url .. "?key=" .. api_key
+    table.insert(args, '?alt=sse&key=' .. api_key)
   end
   table.insert(args, url)
   return args
 end
+
+
+
+
+
+
+
+
+
+
 
 function M.write_string_at_cursor(str)
   vim.schedule(function()
@@ -179,31 +189,18 @@ end
 local group = vim.api.nvim_create_augroup('DING_LLM_AutoGroup', { clear = true })
 local active_job = nil
 
+
 function M.handle_gemini_spec_data(data_stream)
-  local success, json = pcall(vim.json.decode, data_stream)
-  if success then 
-    if json.candidates and json.candidates[1] and json.candidates[1].content and json.candidates[1].content.parts then
-      for _, part in ipairs(json.candidates[1].content.parts) do
-        if part.text then
-          M.write_string_at_cursor(part.text)
-        end
+  if data_stream:match '"text":' then
+    local json = vim.json.decode(data_stream)
+    if json.candidates and json.candidates[1] and json.candidates[1].content then
+      local content = json.candidates[1].content.parts[1].text
+      if content then
+        M.write_string_at_cursor(content)
       end
     end
-  else
-    print("non json " .. data_stream)
   end
 end
-
-function gemini_invoke(opts)
-  M.invoke_llm_and_stream_into_editor({
-    url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent',
-    model = 'gemini-1.5-flash',
-    api_key_name = 'GEMINI_API_KEY',
-    system_prompt = opts.system_prompt,
-    replace = opts.replace,
-  }, M.make_gemini_spec_curl_args, M.handle_gemini_spec_data)
-end
-
 
 
 function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_data_fn)
@@ -261,4 +258,3 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
 end
 
 return M
-
