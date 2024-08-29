@@ -225,8 +225,7 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
     on_stdout = function(_, out)
       parse_and_call(out)
     end,
-    on_stderr = function(_, err)
-      print("dingllm: Curl error:", err)
+    on_stderr = function(_,_)
     end,
     on_exit = on_exit_fn,
   }
