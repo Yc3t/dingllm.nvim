@@ -92,7 +92,7 @@ end
 
 function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
   local api_key = opts.api_key_name and get_api_key(opts.api_key_name)
-  local url = opts.url .. "/" .. opts.model .. ":generateContent?key=" .. api_key
+  local url = opts.url .. "/" .. opts.model .. ":generateContent?alt=sse&key=" .. api_key
 
   local data = {
       contents = {
@@ -107,7 +107,7 @@ function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
       },
   }
 
-  local args = { '-N', '-X', 'POST', '-H', 'Content-Type: application/json', '-d', vim.json.encode(data) }
+  local args = { '-N', '-X', 'POST', '-H', 'Content-Type: application/json',"--no-buffer", '-d', vim.json.encode(data) }
   table.insert(args, url)
   return args
 end
