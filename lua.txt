@@ -1,3 +1,4 @@
+ 
 local M = {}
 local Job = require 'plenary.job'
 
@@ -90,34 +91,6 @@ function M.make_openai_spec_curl_args(opts, prompt, system_prompt)
   return args
 end
 
-function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
-  local url = opts.url
-  local api_key = opts.api_key_name and get_api_key(opts.api_key_name)
-  local data = {
-    contents = {
-      {
-        role = "user",
-        parts = {
-          { text = prompt }
-        }
-      }
-    },
-    generationConfig = {
-      temperature = 1,
-      topK = 64,
-      topP = 0.95,
-      maxOutputTokens = 8192,
-      responseMimeType = "text/plain"
-    }
-  }
-  local args = { '-N', '-X', 'POST', '-H', 'Content-Type: application/json', '--no-buffer', '-d', vim.json.encode(data) }
-  if api_key then
-    url = url .. "?key=" .. api_key
-  end
-  table.insert(args, url)
-  return args
-end
-
 function M.write_string_at_cursor(str)
   vim.schedule(function()
     local current_window = vim.api.nvim_get_current_win()
@@ -179,33 +152,6 @@ end
 local group = vim.api.nvim_create_augroup('DING_LLM_AutoGroup', { clear = true })
 local active_job = nil
 
-function M.handle_gemini_spec_data(data_stream)
-  local success, json = pcall(vim.json.decode, data_stream)
-  if success then 
-    if json.candidates and json.candidates[1] and json.candidates[1].content and json.candidates[1].content.parts then
-      for _, part in ipairs(json.candidates[1].content.parts) do
-        if part.text then
-          M.write_string_at_cursor(part.text)
-        end
-      end
-    end
-  else
-    print("non json " .. data_stream)
-  end
-end
-
-local function gemini_invoke(opts)
-  M.invoke_llm_and_stream_into_editor({
-    url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent',
-    model = 'gemini-1.5-flash',
-    api_key_name = 'GEMINI_API_KEY',
-    system_prompt = opts.system_prompt,
-    replace = opts.replace,
-  }, M.make_gemini_spec_curl_args, M.handle_gemini_spec_data)
-end
-
-
-
 function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_data_fn)
   vim.api.nvim_clear_autocmds { group = group }
   local prompt = get_prompt(opts)
@@ -261,4 +207,3 @@ function M.invoke_llm_and_stream_into_editor(opts, make_curl_args_fn, handle_dat
 end
 
 return M
-
