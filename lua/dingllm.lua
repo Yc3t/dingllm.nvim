@@ -94,14 +94,7 @@ function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
   local url = opts.url
   local api_key = opts.api_key_name and get_api_key(opts.api_key_name)
   local data = {
-    contents = {
-      {
-        role = "user",
-        parts = {
-          { text = prompt }
-        }
-      }
-    },
+    messages = { { role = 'system', content = system_prompt }, { role = 'user', content = prompt } },
     generationConfig = {
       temperature = 1,
       topK = 64,
@@ -117,13 +110,6 @@ function M.make_gemini_spec_curl_args(opts, prompt, system_prompt)
   table.insert(args, url)
   return args
 end
-
-
-
-
-
-
-
 
 
 
